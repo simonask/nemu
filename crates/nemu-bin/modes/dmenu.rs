@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, io::BufRead as _, path::PathBuf, rc::Rc};
 
 use fuzzy_matcher::FuzzyMatcher;
 use gtk4::{glib, prelude::*};
@@ -8,6 +8,59 @@ use crate::{
     AppMsg,
     mode::{Mode, ModeFactory, ModeMsg},
 };
+
+#[derive(clap::Parser, Clone, PartialEq)]
+pub struct DmenuArgs {
+    /// Delimit arguments by the NUL character (zero) instead of newlines.
+    #[clap(long, short = '0')]
+    pub nul_delimiter: bool,
+    /// Read strings from file instead of stdin.
+    #[clap(long, short)]
+    pub file: Option<PathBuf>,
+    /// Split each input line by the TAB character and choose the n'th.
+    #[clap(long)]
+    pub with_nth: Option<usize>,
+}
+
+impl DmenuArgs {
+    pub fn read_strings(&self) -> Result<Vec<String>, std::io::Error> {
+        if let Some(path) = self.file.as_deref() {
+            self.read_strings_from_input(std::fs::File::open(path)?)
+        } else {
+            self.read_strings_from_input(std::io::stdin())
+        }
+    }
+
+    fn read_strings_from_input<R: std::io::Read>(
+        &self,
+        mut reader: R,
+    ) -> Result<Vec<String>, std::io::Error> {
+        let delimited: Vec<String> = if self.nul_delimiter {
+            let mut buf = String::new();
+            reader.read_to_string(&mut buf)?;
+            buf.split('\0').map(str::to_owned).collect()
+        } else {
+            std::io::BufReader::new(reader)
+                .lines()
+                .collect::<Result<_, _>>()?
+        };
+
+        Ok(if let Some(with_nth) = self.with_nth {
+            delimited
+                .iter()
+                .map(|line| {
+                    if let Some(nth) = line.split('\t').nth(with_nth) {
+                        nth.to_owned()
+                    } else {
+                        line.clone()
+                    }
+                })
+                .collect()
+        } else {
+            delimited
+        })
+    }
+}
 
 pub struct DmenuModeFactory(pub Vec<String>);
 

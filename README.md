@@ -18,5 +18,5 @@ Hyprland, Niri, Sway, Cosmic, etc.
 - **dmenu mode:** Read items from stdin, write the selected item to stdout.
 - TODO: **Calculator:** Parse simple mathematical expressions, and perform unit
   conversions.
-- TODO: **Stylable:** Reads `style.css` from `$XDG_CONFIG_HOME/nemu/style.css`.
+- **Stylable:** Reads GTK stylesheet from `~/.config/nemu/style.css`.
 - **Lightweight:** No daemons, no state.
