@@ -1,0 +1,137 @@
+window {
+    background-color: transparent;
+}
+
+listview {
+    background: none;
+}
+
+gridview {
+    background: none;
+}
+
+/* The visible "card" */
+.nemu-root {
+    background: transparent;
+}
+
+.nemu-card, .nemu-entry {
+    background-color: #1e1e2ebb;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 12px;
+}
+
+.nemu-card {
+    padding: 12px;
+    margin-top: 5px;
+}
+
+.nemu-entry {
+    min-width: 300px;
+    background-color: #1e1e2ebb;
+    color: white;
+}
+
+.nemu-results {
+    min-width: 500px;
+    min-height: 200px;
+    margin-top: 8px;
+    background: none;
+}
+
+.nemu-apps {
+    min-height: 500px;
+}
+
+.nemu-emoji, .emoji {
+    font-size: 1.5em;
+    padding: 3px;
+}
+
+.emoji:hover {
+    background-color: #313244;
+}
+
+.nemu-emojis {
+    min-height: 0px;
+}
+
+.nemu-emoji-picker {
+    min-height: 400px;
+}
+
+.nemu-emoji-search {
+    min-height: 300px;
+}
+
+.nemu-emoji-tabs > button {
+    min-width: 0;
+    min-height: 0;
+    padding: 5px;
+    font-size: 1.5em;
+}
+
+.nemu-dmenu-item {
+    font-family: monospace;
+}
+
+listview > row {
+    min-height: 0;
+    padding: 5px;
+}
+
+listview > row, gridview > child {
+    background: none;
+    border: 1px solid transparent;
+    outline: none;
+    box-shadow: none;
+}
+
+listview > row:hover, gridview > child:hover {
+    background-color: #313244;
+}
+
+listview > row:active, gridview > child:active {
+    background-color: shade(#313244, 1.3);
+}
+
+listview > row:selected, gridview > child:selected {
+    background-color: #313244;
+    color: white;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}
+
+listview > row:focus, gridview > child:focus {
+    background-color: #313244;
+    color: white;
+    border: 1px solid #33ccffee;
+    border-radius: 8px;
+}
+
+.nemu-results-row:hover {
+    background-color: #ffffff3e;
+}
+
+.nemu-results-row .nemu-app-command-line {
+    color: #ffffff88;
+}
+
+.nemu-results-row .nemu-app-name {
+    font-weight: bold;
+}
+
+.nemu-app-details {
+    margin-left: 8px;
+}
+
+.nemu-app-details-name {
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.nemu-app-details-description {
+    color: #ffffff88;
+    margin-top: 5px;
+}
