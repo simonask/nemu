@@ -20,3 +20,39 @@ Hyprland, Niri, Sway, Cosmic, etc.
   conversions.
 - **Stylable:** Reads GTK stylesheet from `~/.config/nemu/style.css`.
 - **Lightweight:** No daemons, no state.
+
+## Installation
+
+Check out the repository and run `cargo install --path crates/nemu-bin`. This will
+put the executable at `~/.cargo/bin/nemu`. Nemu is a single self-contained executable,
+and may be freely copied anywhere on your system.
+
+### Dependencies
+
+- Rust toolchain
+- GTK 4.12+
+
+## Hyprland Integration
+
+Add a keybinding for running `nemu` somewhere in your Hyprland config:
+
+```lua
+hl.bind("SUPER + space", hl.dsp.exec_cmd("nemu"))
+-- Separate keybinding for only the emoji picker, if you want:
+hl.bind("SUPER + period", hl.dsp.exec_cmd("nemu emoji"))
+```
+
+Enable blur for the background of the Nemu window:
+
+```lua
+hl.layer_rule({
+    name = "nemu",
+    match = {
+        namespace = "nemu",
+    },
+    no_anim = true,
+    ignore_alpha = 0.5,
+    blur = true,
+    blur_popups = true,
+})
+```

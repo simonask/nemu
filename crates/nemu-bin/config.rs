@@ -1,5 +1,6 @@
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Config {
+   /// Set the GTK base theme to light. Default is false.
     #[serde(default)]
     pub light: bool,
 }

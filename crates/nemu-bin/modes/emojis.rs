@@ -10,8 +10,14 @@ use crate::{
     mode::{Mode, ModeFactory, ModeMsg},
 };
 
-#[derive(Default)]
-pub struct EmojiPickerFactory;
+#[derive(clap::Parser, Clone, Copy)]
+pub struct EmojiArgs {
+    /// Show a notification when an Emoji was copied to the clipboard.
+    #[clap(long, default_value = "false")]
+    pub notify: bool,
+}
+
+pub struct EmojiPickerFactory(pub EmojiArgs);
 
 impl ModeFactory for EmojiPickerFactory {
     fn name(&self) -> &'static str {
@@ -24,7 +30,7 @@ impl ModeFactory for EmojiPickerFactory {
         initial_query_string: &str,
     ) -> Rc<dyn crate::mode::Mode> {
         let controller = EmojisModel::builder()
-            .launch(initial_query_string.to_owned())
+            .launch((initial_query_string.to_owned(), self.0))
             .forward(&sender, std::convert::identity);
         Rc::new(EmojiPickerMode { controller })
     }
@@ -70,7 +76,7 @@ fn get_emoji_group_tooltip(group: emojis::Group) -> &'static str {
 
 #[relm4::component]
 impl SimpleComponent for EmojisModel {
-    type Init = String;
+    type Init = (String, EmojiArgs);
     type Input = ModeMsg;
     type Output = AppMsg;
 
@@ -87,7 +93,7 @@ impl SimpleComponent for EmojisModel {
     }
 
     fn init(
-        init: Self::Init,
+        (search_string, args): Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -110,12 +116,12 @@ impl SimpleComponent for EmojisModel {
             label.set_label(emoji.emoji().as_str());
         });
 
-        let has_search_string = !init.is_empty();
+        let has_search_string = !search_string.is_empty();
         let picker = EmojiPickerModel::builder()
-            .launch(factory.clone())
+            .launch((factory.clone(), args))
             .forward(sender.output_sender(), std::convert::identity);
         let search = EmojiSearchModel::builder()
-            .launch(factory)
+            .launch((factory, args))
             .forward(sender.output_sender(), std::convert::identity);
 
         let model = EmojisModel {
@@ -146,7 +152,7 @@ struct EmojiPickerModel;
 
 #[relm4::component]
 impl SimpleComponent for EmojiPickerModel {
-    type Init = gtk::SignalListItemFactory;
+    type Init = (gtk::SignalListItemFactory, EmojiArgs);
     type Input = ModeMsg;
     type Output = AppMsg;
 
@@ -170,7 +176,7 @@ impl SimpleComponent for EmojiPickerModel {
     }
 
     fn init(
-        factory: Self::Init,
+        (factory, args): Self::Init,
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -200,8 +206,10 @@ impl SimpleComponent for EmojiPickerModel {
                     .item(position)
                     .and_downcast::<EmojiObject>()
                     .unwrap();
-                s.output_sender()
-                    .emit(AppMsg::TextOutput(item.emoji().as_str().to_owned()));
+                s.output_sender().emit(AppMsg::TextOutput {
+                    text: item.emoji().as_str().to_owned(),
+                    notify: args.notify,
+                });
             });
 
             let scroller = gtk::ScrolledWindow::builder()
@@ -244,7 +252,7 @@ struct EmojiSearchModel {
 
 #[relm4::component]
 impl SimpleComponent for EmojiSearchModel {
-    type Init = gtk::SignalListItemFactory;
+    type Init = (gtk::SignalListItemFactory, EmojiArgs);
     type Input = ModeMsg;
     type Output = AppMsg;
 
@@ -276,7 +284,7 @@ impl SimpleComponent for EmojiSearchModel {
     }
 
     fn init(
-        factory: Self::Init,
+        (factory, args): Self::Init,
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -306,8 +314,10 @@ impl SimpleComponent for EmojiSearchModel {
                 .item(position)
                 .and_downcast::<EmojiObject>()
                 .unwrap();
-            s.output_sender()
-                .emit(AppMsg::TextOutput(item.emoji().as_str().to_owned()));
+            s.output_sender().emit(AppMsg::TextOutput {
+                text: item.emoji().as_str().to_owned(),
+                notify: args.notify,
+            });
         });
 
         let model = EmojiSearchModel {

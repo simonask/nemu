@@ -6,7 +6,7 @@ use std::{
 use clap::Parser;
 use relm4::prelude::*;
 
-use crate::modes::DmenuArgs;
+use crate::modes::{DmenuArgs, EmojiArgs};
 
 mod app;
 mod config;
@@ -23,10 +23,10 @@ pub fn get_system_locales() -> &'static [String] {
 }
 
 /// Optional subcommand.
-#[derive(clap::Subcommand, Clone, PartialEq)]
+#[derive(clap::Subcommand, Clone)]
 enum Command {
     /// Open the Emoji picker. Writes the selected emoji to stdout.
-    Emoji,
+    Emoji(EmojiArgs),
     /// Open the calculator
     Calc,
     /// Read lines from stdin, write the selected line to stdout.
@@ -39,10 +39,13 @@ pub struct Args {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Show Nemu as a regular window instead of a shell layer on top of other windows.
-    /// This is mainly useful for debugging.
-    #[clap(long)]
-    windowed: bool,
+    /// Choose where to put text output, such as that from the Emoji picker.
+    #[clap(long, short, default_value = "clipboard")]
+    output: OutputChoice,
+
+    /// Show a notification when something was copied to the clipboard.
+    #[clap(long, default_value = "false")]
+    notify: bool,
 
     /// Use config file instead of $HOME/.config/nemu/config.toml.
     #[clap(long)]
@@ -51,6 +54,19 @@ pub struct Args {
     /// Use CSS from this file instead of $HOME/.config/nemu/style.css.
     #[clap(long)]
     style: Option<PathBuf>,
+
+    /// Show Nemu as a regular window instead of a shell layer on top of other windows.
+    /// This is mainly useful for debugging.
+    #[clap(long)]
+    windowed: bool,
+}
+
+#[derive(Default, Clone, Copy, clap::ValueEnum)]
+pub enum OutputChoice {
+    #[default]
+    Clipboard,
+    Stdout,
+    Stderr,
 }
 
 fn main() {

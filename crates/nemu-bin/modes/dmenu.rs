@@ -20,6 +20,9 @@ pub struct DmenuArgs {
     /// Split each input line by the TAB character and choose the n'th.
     #[clap(long)]
     pub with_nth: Option<usize>,
+    /// Show a notification when a string was copied to the clipboard.
+    #[clap(long, default_value = "false")]
+    pub notify: bool,
 }
 
 impl DmenuArgs {
@@ -62,7 +65,7 @@ impl DmenuArgs {
     }
 }
 
-pub struct DmenuModeFactory(pub Vec<String>);
+pub struct DmenuModeFactory(pub DmenuArgs, pub Vec<String>);
 
 impl ModeFactory for DmenuModeFactory {
     fn name(&self) -> &'static str {
@@ -71,7 +74,7 @@ impl ModeFactory for DmenuModeFactory {
 
     fn create(&self, sender: relm4::Sender<crate::AppMsg>, _: &str) -> Rc<dyn crate::mode::Mode> {
         let controller = DmenuModel::builder()
-            .launch(self.0.clone())
+            .launch((self.1.clone(), self.0.clone()))
             .forward(&sender, std::convert::identity);
         Rc::new(DmenuMode { controller })
     }
@@ -112,7 +115,7 @@ struct DmenuItem {
 
 #[relm4::component]
 impl SimpleComponent for DmenuModel {
-    type Init = Vec<String>;
+    type Init = (Vec<String>, DmenuArgs);
     type Input = ModeMsg;
     type Output = AppMsg;
 
@@ -136,12 +139,12 @@ impl SimpleComponent for DmenuModel {
     }
 
     fn init(
-        init: Self::Init,
+        (strings, args): Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let store = gtk::gio::ListStore::new::<glib::BoxedAnyObject>();
-        for s in init {
+        for s in strings {
             store.append(&glib::BoxedAnyObject::new(DmenuItem {
                 text: s,
                 score: Cell::new(1),
@@ -217,8 +220,10 @@ impl SimpleComponent for DmenuModel {
                 .item(position)
                 .and_downcast::<glib::BoxedAnyObject>()
                 .unwrap();
-            s.output_sender()
-                .emit(AppMsg::TextOutput(item.borrow::<DmenuItem>().text.clone()));
+            s.output_sender().emit(AppMsg::TextOutput {
+                text: item.borrow::<DmenuItem>().text.clone(),
+                notify: args.notify,
+            });
         });
 
         ComponentParts { model, widgets }

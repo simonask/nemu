@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, hash_map},
+    io::Write,
     rc::Rc,
 };
 
@@ -9,11 +10,12 @@ use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell as _};
 use relm4::prelude::*;
 
 use crate::{
-    Args, Command,
+    Args, Command, OutputChoice,
     desktop_entry::{self, DesktopEntryActionObject, DesktopEntryObject},
     get_system_locales,
     mode::{Mode, ModeFactory, ModeMsg},
-    modes, strip_field_codes,
+    modes::{self, EmojiArgs},
+    strip_field_codes,
 };
 
 pub struct AppModel {
@@ -27,6 +29,7 @@ pub struct AppModel {
     display: gtk::gdk::Display,
     mode_stack: gtk::Stack,
     command: Option<Command>,
+    output: OutputChoice,
 }
 
 #[derive(Debug)]
@@ -36,7 +39,7 @@ pub enum AppMsg {
     LaunchDesktopEntry(DesktopEntryObject),
     LaunchDesktopAction(DesktopEntryActionObject),
     // Copy to clipboard or stdout
-    TextOutput(String),
+    TextOutput { text: String, notify: bool },
     Quit,
 }
 
@@ -133,12 +136,20 @@ impl SimpleComponent for AppModel {
         let app_launcher_mode_factory = Rc::new(modes::AppLauncherModeFactory::default());
         let help_factory = Rc::new(modes::HelpModeFactory::default());
         let calc_factory = Rc::new(modes::CalculatorModeFactory::default());
-        let emoji_factory = Rc::new(modes::EmojiPickerFactory::default());
+        let emoji_factory = Rc::new(modes::EmojiPickerFactory(
+            if let Some(Command::Emoji(emoji_args)) = args.command.as_ref() {
+                *emoji_args
+            } else {
+                EmojiArgs {
+                    notify: args.notify,
+                }
+            },
+        ));
 
         // If passed a mode on the command line, immediately go into that.
         let current_mode: Option<(&'static str, Rc<dyn Mode>)> =
             args.command.as_ref().map(|command| match command {
-                Command::Emoji => (
+                Command::Emoji(_) => (
                     emoji_factory.name(),
                     emoji_factory.create(sender.input_sender().clone(), ""),
                 ),
@@ -148,7 +159,7 @@ impl SimpleComponent for AppModel {
                 ),
                 Command::Dmenu(dmenu_args) => {
                     let strings = dmenu_args.read_strings().unwrap();
-                    let dmenu_factory = crate::modes::DmenuModeFactory(strings);
+                    let dmenu_factory = crate::modes::DmenuModeFactory(dmenu_args.clone(), strings);
                     (
                         dmenu_factory.name(),
                         dmenu_factory.create(sender.input_sender().clone(), ""),
@@ -179,6 +190,7 @@ impl SimpleComponent for AppModel {
             display: RootExt::display(&root),
             mode_stack: mode_stack.clone(),
             command: args.command,
+            output: args.output,
         };
         let widgets = view_output!();
 
@@ -260,8 +272,8 @@ impl SimpleComponent for AppModel {
                 self.launch_desktop_entry_action(desktop_action);
                 relm4::main_application().quit();
             }
-            AppMsg::TextOutput(text) => {
-                print!("{}", text);
+            AppMsg::TextOutput { text, notify } => {
+                self.text_output(&text, notify);
                 relm4::main_application().quit();
             }
         }
@@ -269,6 +281,35 @@ impl SimpleComponent for AppModel {
 }
 
 impl AppModel {
+    fn text_output(&self, text: &str, notify: bool) {
+        match self.output {
+            OutputChoice::Clipboard => {
+                // Spawn a subprocess instead of using the Gtk clipboard
+                // interface directly, because we are likely immediately exiting.
+                let mut child = std::process::Command::new("wl-copy")
+                    .stdin(std::process::Stdio::piped())
+                    .spawn()
+                    .expect("wl-copy");
+                child
+                    .stdin
+                    .take()
+                    .unwrap()
+                    .write_all(text.as_bytes())
+                    .unwrap();
+
+                if notify {
+                    let notification = gtk::gio::Notification::new(&format!("Nemu"));
+                    notification.set_priority(gtk::gio::NotificationPriority::Low);
+                    notification.set_body(Some(&format!("Copied to clipboard: {text}")));
+                    relm4::main_application()
+                        .send_notification(Some("dev.nemu.Nemu"), &notification);
+                }
+            }
+            OutputChoice::Stdout => _ = std::io::stdout().write_all(text.as_bytes()),
+            OutputChoice::Stderr => _ = std::io::stderr().write_all(text.as_bytes()),
+        }
+    }
+
     fn launch_desktop_entry(&self, desktop_entry: DesktopEntryObject) {
         self.launch_desktop_entry_(desktop_entry.entry());
     }
