@@ -12,10 +12,8 @@ use relm4::prelude::*;
 use crate::{
     Args, Command, OutputChoice,
     desktop_entry::{self, DesktopEntryActionObject, DesktopEntryObject},
-    get_system_locales,
     mode::{Mode, ModeFactory, ModeMsg},
     modes::{self, EmojiArgs},
-    strip_field_codes,
 };
 
 pub struct AppModel {
@@ -286,23 +284,43 @@ impl AppModel {
             OutputChoice::Clipboard => {
                 // Spawn a subprocess instead of using the Gtk clipboard
                 // interface directly, because we are likely immediately exiting.
-                let mut child = std::process::Command::new("wl-copy")
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                    .expect("wl-copy");
-                child
-                    .stdin
-                    .take()
-                    .unwrap()
-                    .write_all(text.as_bytes())
-                    .unwrap();
-
-                if notify {
-                    let notification = gtk::gio::Notification::new(&format!("Nemu"));
-                    notification.set_priority(gtk::gio::NotificationPriority::Low);
-                    notification.set_body(Some(&format!("Copied to clipboard: {text}")));
-                    relm4::main_application()
-                        .send_notification(Some("dev.nemu.Nemu"), &notification);
+                let child_result: Result<(), Box<dyn std::error::Error>> =
+                    std::process::Command::new("wl-copy")
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                        .map_err(Into::into)
+                        .and_then(
+                            |mut child| -> Result<std::process::Child, Box<dyn std::error::Error>> {
+                                child
+                                    .stdin
+                                    .as_mut()
+                                    .take()
+                                    .unwrap()
+                                    .write_all(text.as_bytes())?;
+                                Ok(child)
+                            },
+                        )
+                        .and_then(|mut child| child.wait().map(|_| ()).map_err(Into::into));
+                match child_result {
+                    Ok(_) => {
+                        if notify {
+                            let notification = gtk::gio::Notification::new("Nemu");
+                            notification.set_priority(gtk::gio::NotificationPriority::Low);
+                            notification.set_body(Some(&format!("Copied to clipboard: {text}")));
+                            relm4::main_application()
+                                .send_notification(Some("dev.nemu.Nemu"), &notification);
+                        }
+                    }
+                    Err(err) => {
+                        let notification = gtk::gio::Notification::new("Nemu");
+                        notification.set_priority(gtk::gio::NotificationPriority::High);
+                        notification.set_category(Some("transfer.error"));
+                        notification.set_body(Some(&format!(
+                            "Could not copy to clipboard (wl-copy): {err}"
+                        )));
+                        relm4::main_application()
+                            .send_notification(Some("dev.nemu.Nemu"), &notification);
+                    }
                 }
             }
             OutputChoice::Stdout => _ = std::io::stdout().write_all(text.as_bytes()),
@@ -316,41 +334,46 @@ impl AppModel {
 
     fn launch_desktop_entry_(&self, desktop_entry: &freedesktop_desktop_entry::DesktopEntry) {
         tracing::debug!("Launching desktop entry: {}", desktop_entry.id());
-        let Some(exec) = desktop_entry.exec() else {
+        // Go through GDesktopAppInfo rather than the raw Exec line: it handles
+        // field codes, startup notification, and — crucially — D-Bus activation
+        // for DBusActivatable entries (calling org.freedesktop.Application.Activate,
+        // falling back to spawning Exec if that fails).
+        let Some(app_info) = gio_unix::DesktopAppInfo::from_filename(&desktop_entry.path) else {
             tracing::error!(
-                "Cannot launch {}: No Exec section in desktop entry",
-                desktop_entry.appid
+                "Cannot launch {}: failed to load desktop file at {}",
+                desktop_entry.appid,
+                desktop_entry.path.display()
             );
             return;
         };
-        let command_line = strip_field_codes(exec);
-        let app_info = gtk::gio::AppInfo::create_from_commandline(
-            command_line,
-            desktop_entry.name(get_system_locales()).as_deref(),
-            gtk::gio::AppInfoCreateFlags::NONE,
-        )
-        .unwrap();
         let ctx = self.display.app_launch_context();
-        app_info.launch(&[], Some(&ctx)).unwrap();
+        if let Err(err) = app_info.launch(&[], Some(&ctx)) {
+            tracing::error!("Failed to launch {}: {err}", desktop_entry.appid);
+        }
     }
 
     fn launch_desktop_entry_action(&self, action: DesktopEntryActionObject) {
         match action.kind() {
-            desktop_entry::DesktopEntryActionKind::Launch => {
+            // Both a plain launch and D-Bus activation go through GDesktopAppInfo,
+            // which picks D-Bus activation automatically for DBusActivatable entries.
+            desktop_entry::DesktopEntryActionKind::Launch
+            | desktop_entry::DesktopEntryActionKind::DBusActivate => {
                 self.launch_desktop_entry_(action.entry())
             }
-            desktop_entry::DesktopEntryActionKind::DBusActivate => todo!(),
-            desktop_entry::DesktopEntryActionKind::Named(name, exec) => {
-                tracing::debug!("Running action: {}:{name}", action.entry().appid);
-                let command_line = strip_field_codes(exec);
-                let app_info = gtk::gio::AppInfo::create_from_commandline(
-                    command_line,
-                    action.entry().name(get_system_locales()).as_deref(),
-                    gtk::gio::AppInfoCreateFlags::NONE,
-                )
-                .unwrap();
+            desktop_entry::DesktopEntryActionKind::Named(name, _exec) => {
+                let entry = action.entry();
+                tracing::debug!("Running action: {}:{name}", entry.appid);
+                let Some(app_info) = gio_unix::DesktopAppInfo::from_filename(&entry.path) else {
+                    tracing::error!(
+                        "Cannot run action {name} on {}: failed to load desktop file",
+                        entry.appid
+                    );
+                    return;
+                };
                 let ctx = self.display.app_launch_context();
-                app_info.launch(&[], Some(&ctx)).unwrap();
+                // launch_action performs org.freedesktop.Application.ActivateAction
+                // for DBusActivatable entries, or runs the action's Exec otherwise.
+                app_info.launch_action(name, Some(&ctx));
             }
         }
     }

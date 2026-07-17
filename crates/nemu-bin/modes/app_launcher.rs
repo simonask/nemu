@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc, sync::OnceLock};
+use std::{path::Path, rc::Rc};
 
 use freedesktop_desktop_entry::DesktopEntry;
 use fuzzy_matcher::FuzzyMatcher as _;
@@ -424,28 +424,7 @@ impl AppLauncherModel {
     }
 }
 
-pub fn cached_desktop_entries() -> &'static [DesktopEntry] {
-    static SYSTEM_APPS: OnceLock<&'static [DesktopEntry]> = OnceLock::new();
-
-    fn leak_freedesktop_apps() -> &'static [DesktopEntry] {
-        let locales = freedesktop_desktop_entry::get_languages_from_env();
-        let mut apps = freedesktop_desktop_entry::desktop_entries(&locales);
-        let mut i = 0;
-        while i < apps.len() {
-            // TODO: Support launching terminal apps
-            if apps[i].hidden() || apps[i].no_display() || apps[i].terminal() {
-                apps.swap_remove(i);
-            } else {
-                i += 1;
-            }
-        }
-        Vec::leak(apps)
-    }
-
-    SYSTEM_APPS.get_or_init(leak_freedesktop_apps)
-}
-
-pub fn calculate_score(
+fn calculate_score(
     entry: &DesktopEntry,
     pattern: &str,
     matcher: &fuzzy_matcher::skim::SkimMatcherV2,

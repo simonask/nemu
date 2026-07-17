@@ -138,26 +138,3 @@ fn main() {
 
     app.run::<AppModel>(args);
 }
-
-fn strip_field_codes(exec: &str) -> String {
-    exec.split_whitespace()
-        .filter(|t| {
-            !matches!(
-                *t,
-                "%f" | "%F"
-                    | "%u"
-                    | "%U"
-                    | "%d"
-                    | "%D"
-                    | "%n"
-                    | "%N"
-                    | "%i"
-                    | "%c"
-                    | "%k"
-                    | "%v"
-                    | "%m"
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
